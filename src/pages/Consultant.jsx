@@ -3,11 +3,25 @@ import { Box, Typography, Card, Stack, Chip, Button, Avatar } from '@mui/materia
 import { Psychology, AutoGraph, LocalOffer, TipsAndUpdates } from '@mui/icons-material';
 
 const InsightCard = ({ title, reason, action, icon, color }) => (
-  <Card sx={{ p: 3, mb: 2, borderRadius: 4, borderLeft: `6px solid ${color}`, bgcolor: '#fff' }}>
+  <Card sx={{ 
+    p: 3, 
+    mb: 2, 
+    borderRadius: 3, 
+    borderLeft: `6px solid ${color}`, 
+    bgcolor: '#fff',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+    transition: 'transform 0.2s',
+    '&:hover': {
+      transform: 'translateY(-2px)',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.12)'
+    }
+  }}>
     <Stack direction="row" spacing={2} alignItems="flex-start">
-      <Avatar sx={{ bgcolor: color }}>{icon}</Avatar>
+      <Avatar sx={{ bgcolor: color, width: 48, height: 48 }}>{icon}</Avatar>
       <Box sx={{ flexGrow: 1 }}>
-        <Typography variant="subtitle2" color="text.secondary" fontWeight="700">AI STRATEGY</Typography>
+        <Typography variant="subtitle2" color="text.secondary" fontWeight="700" sx={{ mb: 0.5 }}>
+          AI STRATEGY
+        </Typography>
         <Typography variant="h6" fontWeight="900" sx={{ mb: 1 }}>{title}</Typography>
         <Typography variant="body2" sx={{ mb: 2, color: '#555' }}>
           <strong>Reason:</strong> {reason}
@@ -17,14 +31,24 @@ const InsightCard = ({ title, reason, action, icon, color }) => (
           <Typography variant="body2" fontWeight="600">{action}</Typography>
         </Box>
       </Box>
-      <Button variant="outlined" size="small" sx={{ borderRadius: 2 }}>Apply</Button>
+      <Button 
+        variant="outlined" 
+        size="small" 
+        sx={{ 
+          borderRadius: 2,
+          textTransform: 'none',
+          fontWeight: 700
+        }}
+      >
+        Apply
+      </Button>
     </Stack>
   </Card>
 );
 
 export default function Consultant() {
   return (
-    <Box sx={{ maxWidth: 800, mx: 'auto', py: 4 }}>
+    <Box>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 4 }}>
         <Psychology sx={{ fontSize: 40, color: '#673ab7' }} />
         <Box>

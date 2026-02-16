@@ -130,18 +130,26 @@ export default function Analytics() {
   if (loading) return <LinearProgress sx={{ mt: 5 }} />;
 
   return (
-    <Box sx={{ width: '100%', minHeight: '100vh', px: 4, py: 4 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
+    <Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
         <Box>
-          <Typography variant="h4" fontWeight="900">Store Analytics</Typography>
-          <Typography variant="body2" color="text.secondary">Real-time behavior & stock modeling</Typography>
+          <Typography variant="h4" fontWeight="900">Analytics</Typography>
+          <Typography variant="body2" color="text.secondary">Store insights and performance metrics</Typography>
         </Box>
         <ToggleButtonGroup 
           value={range} 
           exclusive 
           onChange={(e, val) => val && setRange(val)} 
           size="small"
-          sx={{ bgcolor: '#fff' }}
+          sx={{ 
+            bgcolor: '#fff',
+            borderRadius: 2,
+            '& .MuiToggleButton-root': {
+              borderRadius: 2,
+              px: 2,
+              py: 0.5
+            }
+          }}
         >
           <ToggleButton value="daily">Daily</ToggleButton>
           <ToggleButton value="weekly">Weekly</ToggleButton>
@@ -149,22 +157,27 @@ export default function Analytics() {
         </ToggleButtonGroup>
       </Stack>
 
-      <Grid container spacing={3} mb={4}>
-        <Grid item xs={12} md={4}>
-          <MetricCard title="Revenue" value={`₹${data.revenue}`} color="#1976d2" sub="Inflow" />
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={4}>
+          <MetricCard title="Revenue" value={`₹${data.revenue.toFixed(2)}`} color="#1976d2" sub="Total Inflow" />
         </Grid>
-        <Grid item xs={12} md={4}>
-          <MetricCard title="Units" value={data.totalSales} color="#9c27b0" sub="Sold" />
+        <Grid item xs={12} sm={6} md={4}>
+          <MetricCard title="Units Sold" value={data.totalSales} color="#9c27b0" sub="Transactions" />
         </Grid>
-        <Grid item xs={12} md={4}>
-          <MetricCard title="Critical" value={data.inventoryHealth.filter(i => i.status === "Critical").length} color="#d32f2f" sub="Low Stock" />
+        <Grid item xs={12} sm={6} md={4}>
+          <MetricCard title="Critical Items" value={data.inventoryHealth.filter(i => i.status === "Critical").length} color="#d32f2f" sub="Low Stock Alert" />
         </Grid>
       </Grid>
 
-      <Grid container spacing={3} mb={4}>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} lg={8}>
-          <Card sx={{ p: 3, borderRadius: 4, height: 450 }}>
-            <Typography variant="h6" fontWeight="800" mb={3}>Revenue Velocity</Typography>
+          <Card sx={{ 
+            p: 3, 
+            borderRadius: 3, 
+            height: 450,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.08)'
+          }}>
+            <Typography variant="h6" fontWeight="800" sx={{ mb: 3 }}>Revenue Velocity</Typography>
             <ResponsiveContainer width="100%" height="85%">
               <AreaChart data={data.trends}>
                 <defs>
@@ -184,8 +197,13 @@ export default function Analytics() {
         </Grid>
 
         <Grid item xs={12} lg={4}>
-          <Card sx={{ p: 3, borderRadius: 4, height: 450 }}>
-            <Typography variant="h6" fontWeight="800" mb={3}>Top Movers</Typography>
+          <Card sx={{ 
+            p: 3, 
+            borderRadius: 3, 
+            height: 450,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.08)'
+          }}>
+            <Typography variant="h6" fontWeight="800" sx={{ mb: 3 }}>Top Movers</Typography>
             <ResponsiveContainer width="100%" height="85%">
               <BarChart data={data.topPerformers} layout="vertical">
                 <XAxis type="number" hide />
@@ -198,32 +216,50 @@ export default function Analytics() {
         </Grid>
       </Grid>
 
-      <Typography variant="h6" fontWeight="800" mb={2}>Stock Health Model</Typography>
-      <TableContainer component={Paper} sx={{ borderRadius: 4, mb: 5 }}>
+      <Typography variant="h6" fontWeight="800" sx={{ mb: 2 }}>Stock Health Model</Typography>
+      <TableContainer component={Paper} sx={{ 
+        borderRadius: 3, 
+        mb: 5,
+        boxShadow: '0 2px 12px rgba(0,0,0,0.08)'
+      }}>
         <Table>
           <TableHead sx={{ bgcolor: '#f8f9fa' }}>
             <TableRow>
-              <TableCell>Item</TableCell>
-              <TableCell>Stock</TableCell>
-              <TableCell>Velocity</TableCell>
-              <TableCell>Days Left</TableCell>
-              <TableCell>Status</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Item</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Stock</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Velocity</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Days Left</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {data.inventoryHealth.map((item) => (
-              <TableRow key={item.name}>
-                <TableCell fontWeight="600">{item.name}</TableCell>
-                <TableCell>{item.stock}</TableCell>
-                <TableCell>{item.avgDaily}</TableCell>
-                <TableCell>{item.estDaysLeft > 100 ? '99+' : item.estDaysLeft}</TableCell>
-                <TableCell>
-                  <Chip label={item.status} size="small" 
-                    sx={{ bgcolor: item.status === 'Critical' ? '#ffebee' : '#e8f5e9', color: item.status === 'Critical' ? '#d32f2f' : '#2e7d32' }} 
-                  />
+            {data.inventoryHealth.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} align="center" sx={{ py: 4, color: '#999' }}>
+                  No inventory data available
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              data.inventoryHealth.map((item) => (
+                <TableRow key={item.name} hover>
+                  <TableCell sx={{ fontWeight: 600 }}>{item.name}</TableCell>
+                  <TableCell>{item.stock}</TableCell>
+                  <TableCell>{item.avgDaily}</TableCell>
+                  <TableCell>{item.estDaysLeft > 100 ? '99+' : item.estDaysLeft}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={item.status} 
+                      size="small" 
+                      sx={{ 
+                        bgcolor: item.status === 'Critical' ? '#ffebee' : item.status === 'Warning' ? '#fff3e0' : '#e8f5e9', 
+                        color: item.status === 'Critical' ? '#d32f2f' : item.status === 'Warning' ? '#ed6c02' : '#2e7d32',
+                        fontWeight: 700
+                      }} 
+                    />
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
