@@ -45,105 +45,82 @@ export default function Sales({ setLastScanned }) {
 
   return (
     <Box>
-      {/* Header */}
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
         <Box>
-          <Typography variant="h4" fontWeight="900" sx={{ mb: 0.5 }}>
-            Sales Terminal
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Scan to sell items
-          </Typography>
+          <Typography variant="h4" fontWeight="900" sx={{ mb: 0.5, color: '#1a1a1a' }}>Point of Sale</Typography>
+          <Typography variant="body2" color="text.secondary">Scan barcodes to process transactions automatically</Typography>
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<QrCodeScanner />}
-          sx={{
-            borderRadius: 2,
-            borderColor: '#1976d2',
-            color: '#1976d2',
-            fontWeight: 700,
-            textTransform: 'none',
-            px: 2
-          }}
-        >
-          SCANNER IS ACTIVE
-        </Button>
       </Stack>
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={4}>
           <Paper sx={{ 
-            p: 4, 
-            textAlign: 'center', 
-            borderRadius: 3, 
-            bgcolor: '#fff',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-            height: '100%'
+            p: 5, textAlign: 'center', borderRadius: 3, bgcolor: '#fff',
+            boxShadow: loading ? '0 0 0 4px rgba(46, 125, 50, 0.2)' : '0 4px 20px rgba(0,0,0,0.05)',
+            border: '1px solid rgba(224, 224, 224, 0.4)', height: '100%',
+            transition: 'all 0.3s ease'
           }}>
             <Box sx={{ 
-              width: 80, 
-              height: 80, 
-              bgcolor: '#e8f5e9', 
-              borderRadius: '50%', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              mx: 'auto', 
-              mb: 2 
+              width: 100, height: 100, borderRadius: '50%', mx: 'auto', mb: 3,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              bgcolor: loading ? '#e8f5e9' : '#f5f5f5',
+              color: loading ? '#2e7d32' : '#9e9e9e',
+              boxShadow: loading ? '0 8px 24px rgba(46, 125, 50, 0.2)' : 'none'
             }}>
-              <QrCodeScanner sx={{ fontSize: 40, color: '#2e7d32' }} />
+              <QrCodeScanner sx={{ fontSize: 50 }} />
             </Box>
-            <Typography variant="h5" fontWeight="800" sx={{ mb: 1, color: loading ? '#2e7d32' : '#666' }}>
-              {loading ? 'SCANNING...' : 'READY TO SCAN'}
+            <Typography variant="h5" fontWeight="900" sx={{ mb: 1, color: loading ? '#2e7d32' : '#424242' }}>
+              {loading ? 'PROCESSING...' : 'READY TO SCAN'}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {loading ? 'Processing sale...' : 'Scan barcode to sell'}
+            <Typography variant="body2" fontWeight="600" color="text.secondary" sx={{ mb: 3 }}>
+              {loading ? 'Recording sale to database...' : 'Awaiting barcode input'}
             </Typography>
-            {loading && <LinearProgress color="success" sx={{ mt: 2 }} />}
+            {loading ? <LinearProgress color="success" sx={{ height: 6, borderRadius: 3 }} /> : 
+              <Box sx={{ height: 6, bgcolor: '#f0f0f0', borderRadius: 3 }} />}
           </Paper>
         </Grid>
+
         <Grid item xs={12} md={8}>
           <Paper sx={{ 
-            borderRadius: 3, 
-            overflow: 'hidden', 
-            minHeight: '70vh',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.08)'
+            borderRadius: 3, overflow: 'hidden', minHeight: '60vh',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid rgba(224, 224, 224, 0.4)'
           }}>
-            <Box sx={{ p: 3, bgcolor: '#f8f9fa', borderBottom: '1px solid #eee' }}>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <ReceiptLong color="primary" />
-                <Typography variant="h6" fontWeight="800">Recent Sales</Typography>
-                <Chip label={`${sales.length} transactions`} size="small" sx={{ ml: 'auto' }} />
+            <Box sx={{ p: 3, bgcolor: '#fff', borderBottom: '1px solid rgba(224, 224, 224, 0.4)' }}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <ReceiptLong sx={{ color: '#1976d2' }} />
+                <Typography variant="h6" fontWeight="800" color="#212121">Transaction Log</Typography>
+                <Chip label={`${sales.length} today`} size="small" sx={{ ml: 'auto', bgcolor: '#e3f2fd', color: '#1976d2', fontWeight: 700 }} />
               </Stack>
             </Box>
             <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow sx={{ bgcolor: '#fafafa' }}>
-                    <TableCell sx={{ fontWeight: 800 }}>TIME</TableCell>
-                    <TableCell sx={{ fontWeight: 800 }}>ITEM</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 800 }}>PRICE</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 800 }}>QTY</TableCell>
+              <Table sx={{ minWidth: 500 }}>
+                <TableHead sx={{ bgcolor: '#fafafa' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: '#757575', py: 2 }}>TIME</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#757575', py: 2 }}>ITEM PURCHASED</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: '#757575', py: 2 }}>PRICE</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: '#757575', py: 2 }}>STATUS</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {sales.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} align="center" sx={{ py: 6, color: '#999' }}>
-                        No sales yet. Start scanning to record transactions.
+                      <TableCell colSpan={4} align="center" sx={{ py: 8, color: '#9e9e9e' }}>
+                        <Typography variant="subtitle1" fontWeight="600">No transactions recorded yet.</Typography>
                       </TableCell>
                     </TableRow>
                   ) : (
                     sales.map(s => (
-                      <TableRow key={s.id} hover>
-                        <TableCell>{s.timestamp?.toDate().toLocaleTimeString() || 'N/A'}</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>{s.name}</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      <TableRow key={s.id} sx={{ '&:last-child td, &:last-child th': { border: 0 }, '&:hover': { bgcolor: '#f8f9fa' } }}>
+                        <TableCell sx={{ fontWeight: 600, color: '#757575' }}>
+                          {s.timestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'N/A'}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 800, color: '#212121' }}>{s.name}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, color: '#424242' }}>
                           ₹{parseFloat(s.price || 0).toFixed(2)}
                         </TableCell>
                         <TableCell align="right">
-                          <Chip label="-1" size="small" sx={{ bgcolor: '#ffebee', color: '#d32f2f', fontWeight: 700 }} />
+                          <Chip label="SOLD" size="small" sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 800, borderRadius: 1.5 }} />
                         </TableCell>
                       </TableRow>
                     ))

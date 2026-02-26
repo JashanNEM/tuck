@@ -2,28 +2,61 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { doc, setDoc, getDoc, increment, collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { 
-  Box, Grid, Typography, Card, CardContent, 
-  Stack, Button, TextField, InputAdornment, Chip
+  Box, Typography, Stack, Button, TextField, InputAdornment, Chip,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Card
 } from '@mui/material';
 import { 
-  QrCodeScanner, Search
+  QrCodeScanner, Search, Add as AddIcon, Remove as RemoveIcon
 } from '@mui/icons-material';
+
+// 1. Metric Card Component for the layout
+function MetricCard({ title, value, color, sub, bg }) {
+  return (
+    <Card sx={{ 
+      p: 3, borderRadius: 3, borderLeft: `6px solid ${color}`, 
+      boxShadow: '0 4px 20px rgba(0,0,0,0.05)', borderTop: '1px solid #f0f0f0',
+      borderRight: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0',
+      height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'
+    }}>
+      <Typography variant="caption" color="text.secondary" fontWeight="800" sx={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>{title}</Typography>
+      <Typography variant="h3" fontWeight="900" sx={{ color: '#212121', my: 1 }}>{value}</Typography>
+      <Box><Chip label={sub} size="small" sx={{ bgcolor: bg, color: color, fontWeight: 700, borderRadius: 1.5 }} /></Box>
+    </Card>
+  );
+}
 
 export default function InventoryPage({ setLastScanned }) {
   const [history, setHistory] = useState([]);
   const [allStock, setAllStock] = useState([]); // All items in DB
+  const [salesData, setSalesData] = useState({ revenue: 0, totalSales: 0 }); // Added state for Sales Metrics
   const [searchTerm, setSearchTerm] = useState("");
   const [status, setStatus] = useState("READY");
   const [loading, setLoading] = useState(false);
   const [sessionStats, setSessionStats] = useState({ count: 0, value: 0, items: 0 });
   const bufferRef = useRef("");
 
-  // Real-time listener for the WHOLE database
+  // Real-time listener for the WHOLE inventory database
   useEffect(() => {
     const q = query(collection(db, "inventory"), orderBy("lastUpdated", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const stockItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setAllStock(stockItems);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time listener for Sales Data (Revenue & Transactions)
+  useEffect(() => {
+    const q = query(collection(db, "sales"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let totalRev = 0;
+      snapshot.forEach((doc) => {
+        totalRev += Number(doc.data().price || 0);
+      });
+      setSalesData({
+        revenue: totalRev,
+        totalSales: snapshot.size
+      });
     });
     return () => unsubscribe();
   }, []);
@@ -36,6 +69,10 @@ export default function InventoryPage({ setLastScanned }) {
       (item.barcode || "").toLowerCase().includes(term)
     );
   });
+
+  // Calculate Critical Items dynamically based on current inventory
+  // (Assuming critical means quantity is 2 or less)
+  const criticalCount = allStock.filter(item => (item.quantity || 0) <= 2).length;
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -97,7 +134,9 @@ export default function InventoryPage({ setLastScanned }) {
   };
 
   return (
-    <Box>
+    // boxSizing and width guarantees the page doesn't break out of the window frame
+    <Box sx={{ flexGrow: 1, width: '100%', boxSizing: 'border-box', p: { xs: 2, md: 4 } }}>
+      
       {/* Header */}
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
         <Box>
@@ -120,8 +159,21 @@ export default function InventoryPage({ setLastScanned }) {
             px: 2
           }}
         >
-          SCANNER IS ACTIVE
+          {status === "READY" ? "SCANNER IS ACTIVE" : status}
         </Button>
+      </Stack>
+
+      {/* TOP METRICS ROW: Forced layout grid using Stack */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ width: '100%', mb: 4 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <MetricCard title="Revenue" value={`₹${salesData.revenue.toFixed(2)}`} color="#1976d2" bg="#e3f2fd" sub="TOTAL INFLOW" />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <MetricCard title="Units Sold" value={salesData.totalSales} color="#9c27b0" bg="#f3e5f5" sub="TRANSACTIONS" />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <MetricCard title="Critical Items" value={criticalCount} color="#d32f2f" bg="#ffebee" sub="RESTOCK SOON" />
+        </Box>
       </Stack>
 
       {/* Search Bar */}
@@ -147,32 +199,47 @@ export default function InventoryPage({ setLastScanned }) {
         }}
       />
 
-      {/* Product Grid - SmartShop Card Style */}
-      <Grid container spacing={2}>
-        {filteredStock.map((item) => {
-          const category = getCategory(item.name);
-          const isLowStock = (item.quantity || 0) < 10;
-          
-          return (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={item.id}>
-              <Card
-                sx={{
-                  borderRadius: 3,
-                  boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-                  border: 'none',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.12)'
-                  }
-                }}
-              >
-                <CardContent sx={{ p: 2.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  {/* Top Row: Category & Price */}
-                  <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
+      {/* Product Data Table */}
+      <TableContainer 
+        component={Paper} 
+        sx={{ 
+          borderRadius: 3, 
+          boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+          border: 'none',
+          overflow: 'hidden'
+        }}
+      >
+        <Table sx={{ minWidth: 650 }} aria-label="inventory table">
+          <TableHead sx={{ bgcolor: '#f8f9fa' }}>
+            <TableRow>
+              <TableCell sx={{ fontWeight: 800, color: '#555' }}>Product Details</TableCell>
+              <TableCell sx={{ fontWeight: 800, color: '#555' }}>Category</TableCell>
+              <TableCell sx={{ fontWeight: 800, color: '#555' }}>Barcode</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 800, color: '#555' }}>Price</TableCell>
+              <TableCell align="center" sx={{ fontWeight: 800, color: '#555' }}>Stock Level</TableCell>
+              <TableCell align="center" sx={{ fontWeight: 800, color: '#555' }}>Quick Edit</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredStock.map((item) => {
+              const category = getCategory(item.name);
+              const isLowStock = (item.quantity || 0) <= 2; // Updated low stock rule to match "Critical" rule
+              
+              return (
+                <TableRow
+                  key={item.id}
+                  sx={{ 
+                    '&:last-child td, &:last-child th': { border: 0 },
+                    '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.02)' },
+                    transition: 'background-color 0.2s'
+                  }}
+                >
+                  <TableCell component="th" scope="row">
+                    <Typography variant="subtitle2" fontWeight="800" sx={{ color: '#1a1a1a' }}>
+                      {item.name}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
                     <Chip
                       label={category}
                       size="small"
@@ -181,88 +248,71 @@ export default function InventoryPage({ setLastScanned }) {
                         color: '#1976d2',
                         fontWeight: 700,
                         fontSize: '0.65rem',
-                        height: 20
+                        height: 24
                       }}
                     />
-                    <Typography variant="h6" fontWeight="900" sx={{ color: '#333' }}>
+                  </TableCell>
+                  <TableCell sx={{ fontFamily: 'monospace', color: '#888', fontSize: '0.85rem' }}>
+                    {item.barcode}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="subtitle2" fontWeight="800" sx={{ color: '#333' }}>
                       ₹{parseFloat(item.price || 0).toFixed(2)}
                     </Typography>
-                  </Stack>
-
-                  {/* Product Name */}
-                  <Typography variant="h6" fontWeight="800" sx={{ mb: 0.5, color: '#1a1a1a' }}>
-                    {item.name}
-                  </Typography>
-
-                  {/* Product Code */}
-                  <Typography variant="caption" sx={{ color: '#888', mb: 2, fontFamily: 'monospace' }}>
-                    CODE: {item.barcode}
-                  </Typography>
-
-                  {/* Bottom: Stock Control */}
-                  <Box sx={{ mt: 'auto', pt: 2, borderTop: '1px solid #f0f0f0' }}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Box>
-                        <Typography variant="caption" sx={{ color: '#999', display: 'block', mb: 0.5 }}>
-                          ITEMS IN SHOP
-                        </Typography>
-                        <Typography
-                          variant="h5"
-                          fontWeight="900"
-                          sx={{ color: isLowStock ? '#d32f2f' : '#333' }}
-                        >
-                          {item.quantity || 0}
-                        </Typography>
-                      </Box>
-                      <Stack direction="row" spacing={0.5}>
-                        <Button
-                          size="small"
-                          sx={{
-                            minWidth: 36,
-                            height: 36,
-                            borderRadius: 1.5,
-                            bgcolor: '#ffebee',
-                            color: '#d32f2f',
-                            fontWeight: 800,
-                            '&:hover': { bgcolor: '#ffcdd2' }
-                          }}
-                        >
-                          −
-                        </Button>
-                        <Button
-                          size="small"
-                          sx={{
-                            minWidth: 36,
-                            height: 36,
-                            borderRadius: 1.5,
-                            bgcolor: '#e8f5e9',
-                            color: '#2e7d32',
-                            fontWeight: 800,
-                            '&:hover': { bgcolor: '#c8e6c9' }
-                          }}
-                        >
-                          +
-                        </Button>
-                      </Stack>
+                  </TableCell>
+                  <TableCell align="center">
+                    <Typography
+                      variant="subtitle1"
+                      fontWeight="900"
+                      sx={{ color: isLowStock ? '#d32f2f' : '#2e7d32' }}
+                    >
+                      {item.quantity || 0}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="center">
+                    <Stack direction="row" spacing={1} justifyContent="center">
+                      <IconButton
+                        size="small"
+                        sx={{
+                          bgcolor: '#ffebee',
+                          color: '#d32f2f',
+                          borderRadius: 1.5,
+                          '&:hover': { bgcolor: '#ffcdd2' }
+                        }}
+                      >
+                        <RemoveIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        sx={{
+                          bgcolor: '#e8f5e9',
+                          color: '#2e7d32',
+                          borderRadius: 1.5,
+                          '&:hover': { bgcolor: '#c8e6c9' }
+                        }}
+                      >
+                        <AddIcon fontSize="small" />
+                      </IconButton>
                     </Stack>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          );
-        })}
-      </Grid>
-
-      {filteredStock.length === 0 && (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography variant="h6" color="text.secondary">
-            {searchTerm ? 'No products found' : 'No products in inventory'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Start scanning items to add them to your inventory
-          </Typography>
-        </Box>
-      )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+        
+        {/* Empty State */}
+        {filteredStock.length === 0 && (
+          <Box sx={{ textAlign: 'center', py: 8 }}>
+            <Typography variant="h6" color="text.secondary">
+              {searchTerm ? 'No products found' : 'No products in inventory'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Start scanning items to add them to your inventory
+            </Typography>
+          </Box>
+        )}
+      </TableContainer>
     </Box>
   );
 }

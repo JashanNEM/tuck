@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Card, CardContent, Typography, Box, Stack, Chip, Paper, Button } from '@mui/material';
+import { Grid, Card, CardContent, Typography, Box, Stack, Chip, Paper, Button, Avatar } from '@mui/material';
 import { 
   Inventory2, 
   Warning, 
   AccessTime, 
   AttachMoney,
-  QrCodeScanner
+  QrCodeScanner,
+  ArrowForwardIos
 } from '@mui/icons-material';
 import { db } from '../firebase';
 import { collection, onSnapshot, query, orderBy, where, Timestamp } from 'firebase/firestore';
@@ -21,18 +22,12 @@ export default function Home({ setView }) {
   const [expiringItems, setExpiringItems] = useState([]);
 
   useEffect(() => {
-    // Fetch inventory stats
     const invUnsub = onSnapshot(collection(db, "inventory"), (snapshot) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const lowStockCount = items.filter(item => (item.quantity || 0) < 10).length;
-      setStats(prev => ({
-        ...prev,
-        shopItems: items.length,
-        lowStock: lowStockCount
-      }));
+      const lowStockCount = items.filter(item => (item.quantity || 0) <= 5).length;
+      setStats(prev => ({ ...prev, shopItems: items.length, lowStock: lowStockCount }));
     });
 
-    // Fetch recent sales (simulating loans for now)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const salesQuery = query(
@@ -43,222 +38,119 @@ export default function Home({ setView }) {
     
     const salesUnsub = onSnapshot(salesQuery, (snapshot) => {
       const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setRecentLoans(sales.slice(0, 2));
+      setRecentLoans(sales.slice(0, 4)); // Show top 4
       setStats(prev => ({ ...prev, loanTotal: sales.length }));
     });
 
-    return () => {
-      invUnsub();
-      salesUnsub();
-    };
+    return () => { invUnsub(); salesUnsub(); };
   }, []);
 
   const summaryCards = [
-    {
-      icon: <Inventory2 sx={{ fontSize: 32, color: '#1976d2' }} />,
-      value: stats.shopItems,
-      title: "Shop Items",
-      sub: "TOTAL PRODUCTS",
-      color: '#1976d2'
-    },
-    {
-      icon: <Warning sx={{ fontSize: 32, color: '#d32f2f' }} />,
-      value: stats.lowStock,
-      title: "Low Stock",
-      sub: "BUY MORE SOON",
-      color: '#d32f2f'
-    },
-    {
-      icon: <AccessTime sx={{ fontSize: 32, color: '#ed6c02' }} />,
-      value: stats.oldItems,
-      title: "Old Items",
-      sub: "CHECK EXPIRY",
-      color: '#ed6c02'
-    },
-    {
-      icon: <AttachMoney sx={{ fontSize: 32, color: '#2e7d32' }} />,
-      value: stats.loanTotal,
-      title: "Today's Sales",
-      sub: "TRANSACTIONS",
-      color: '#2e7d32'
-    }
+    { icon: <Inventory2 />, value: stats.shopItems, title: "Total Items", sub: "INVENTORY", color: '#1976d2', bg: '#e3f2fd' },
+    { icon: <Warning />, value: stats.lowStock, title: "Low Stock", sub: "ACTION NEEDED", color: '#d32f2f', bg: '#ffebee' },
+    { icon: <AccessTime />, value: stats.oldItems, title: "Expiring", sub: "CHECK DATES", color: '#ed6c02', bg: '#fff3e0' },
+    { icon: <AttachMoney />, value: stats.loanTotal, title: "Sales Today", sub: "TRANSACTIONS", color: '#2e7d32', bg: '#e8f5e9' }
   ];
 
   return (
     <Box>
-      {/* Header */}
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
         <Box>
-          <Typography variant="h4" fontWeight="900" sx={{ mb: 0.5 }}>
-            Dashboard
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Today's summary and quick insights
-          </Typography>
+          <Typography variant="h4" fontWeight="900" sx={{ mb: 0.5, color: '#1a1a1a' }}>Dashboard</Typography>
+          <Typography variant="body2" color="text.secondary">Store overview and quick insights</Typography>
         </Box>
         <Button
-          variant="outlined"
+          variant="contained"
           startIcon={<QrCodeScanner />}
+          onClick={() => setView('SALES')}
           sx={{
-            borderRadius: 2,
-            borderColor: '#1976d2',
-            color: '#1976d2',
-            fontWeight: 700,
-            textTransform: 'none',
-            px: 2
+            borderRadius: 2, bgcolor: '#1976d2', color: '#fff', fontWeight: 700, textTransform: 'none', px: 3,
+            boxShadow: '0 4px 14px 0 rgba(25, 118, 210, 0.39)'
           }}
         >
-          SCANNER IS ACTIVE
+          GO TO POS
         </Button>
       </Stack>
 
-      {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         {summaryCards.map((card, i) => (
           <Grid item xs={12} sm={6} md={3} key={i}>
-            <Card
-              sx={{
-                borderRadius: 3,
-                boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-                border: 'none',
-                height: '100%',
-                transition: 'transform 0.2s',
-                '&:hover': { transform: 'translateY(-4px)' }
-              }}
-            >
+            <Card sx={{
+              borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid rgba(224, 224, 224, 0.4)',
+              height: '100%', transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)' }
+            }}>
               <CardContent sx={{ p: 3 }}>
-                <Box sx={{ mb: 2 }}>{card.icon}</Box>
-                <Typography variant="h3" fontWeight="900" sx={{ mb: 0.5, color: card.color }}>
-                  {card.value}
-                </Typography>
-                <Typography variant="subtitle1" fontWeight="800" sx={{ mb: 0.5 }}>
-                  {card.title}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" fontWeight="700" sx={{ textTransform: 'uppercase' }}>
-                  {card.sub}
-                </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                  <Avatar sx={{ bgcolor: card.bg, color: card.color, width: 48, height: 48, borderRadius: 2 }}>
+                    {card.icon}
+                  </Avatar>
+                </Stack>
+                <Typography variant="h3" fontWeight="900" sx={{ mb: 0.5, color: '#212121' }}>{card.value}</Typography>
+                <Typography variant="subtitle1" fontWeight="800" sx={{ color: '#757575' }}>{card.title}</Typography>
+                <Typography variant="caption" fontWeight="700" sx={{ color: card.color, textTransform: 'uppercase' }}>{card.sub}</Typography>
               </CardContent>
             </Card>
           </Grid>
         ))}
       </Grid>
 
-      {/* Bottom Sections */}
       <Grid container spacing={3}>
-        {/* Check Freshness Section */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-              <Typography variant="h6" fontWeight="800">
-                Check Freshness
-              </Typography>
-              {expiringItems.length > 0 && (
-                <Chip label="URGENT" size="small" sx={{ bgcolor: '#ffebee', color: '#d32f2f', fontWeight: 700 }} />
-              )}
+          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid rgba(224, 224, 224, 0.4)', height: '100%' }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+              <Typography variant="h6" fontWeight="800" color="#212121">Check Freshness</Typography>
+              {expiringItems.length > 0 && <Chip label="URGENT" size="small" sx={{ bgcolor: '#ffebee', color: '#d32f2f', fontWeight: 700 }} />}
             </Stack>
             {expiringItems.length === 0 ? (
-              <Box sx={{ py: 4, textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
-                  No items expiring soon
-                </Typography>
+              <Box sx={{ py: 6, textAlign: 'center' }}>
+                <AccessTime sx={{ fontSize: 48, color: '#e0e0e0', mb: 1 }} />
+                <Typography variant="body1" fontWeight="600" color="text.secondary">All items are fresh!</Typography>
               </Box>
             ) : (
-              <Stack spacing={1.5}>
+              <Stack spacing={2}>
                 {expiringItems.map((item, i) => (
-                  <Paper
-                    key={i}
-                    sx={{
-                      p: 2,
-                      borderRadius: 2,
-                      bgcolor: '#fff',
-                      border: '1px solid #eee',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
+                  <Box key={i} sx={{ p: 2, borderRadius: 2, bgcolor: '#fafafa', border: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Box>
-                      <Typography variant="subtitle2" fontWeight="700">
-                        {item.name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {item.quantity} LEFT IN SHOP
-                      </Typography>
+                      <Typography variant="subtitle2" fontWeight="800" color="#212121">{item.name}</Typography>
+                      <Typography variant="caption" fontWeight="600" color="#757575">{item.quantity} IN STOCK</Typography>
                     </Box>
                     <Box sx={{ textAlign: 'right' }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                        EXPIRES ON
-                      </Typography>
-                      <Typography variant="subtitle2" fontWeight="800" sx={{ color: '#d32f2f' }}>
-                        {item.expiryDate}
-                      </Typography>
+                      <Typography variant="caption" color="text.secondary" fontWeight="700" sx={{ display: 'block' }}>EXPIRES</Typography>
+                      <Typography variant="subtitle2" fontWeight="800" sx={{ color: '#d32f2f' }}>{item.expiryDate}</Typography>
                     </Box>
-                  </Paper>
+                  </Box>
                 ))}
               </Stack>
             )}
           </Paper>
         </Grid>
 
-        {/* Recent Sales Section */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-              <Typography variant="h6" fontWeight="800" sx={{ color: '#2e7d32' }}>
-                Recent Sales
-              </Typography>
-              <Chip label="ACTIVE" size="small" sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 700 }} />
+          <Paper sx={{ p: 3, borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid rgba(224, 224, 224, 0.4)', height: '100%' }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+              <Typography variant="h6" fontWeight="800" color="#212121">Recent Sales</Typography>
+              <Chip label="LIVE" size="small" sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 700 }} />
             </Stack>
             {recentLoans.length === 0 ? (
-              <Box sx={{ py: 4, textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
-                  No sales today yet
-                </Typography>
+              <Box sx={{ py: 6, textAlign: 'center' }}>
+                <AttachMoney sx={{ fontSize: 48, color: '#e0e0e0', mb: 1 }} />
+                <Typography variant="body1" fontWeight="600" color="text.secondary">No sales today yet</Typography>
               </Box>
             ) : (
-              <Stack spacing={1.5}>
+              <Stack spacing={2}>
                 {recentLoans.map((sale, i) => (
-                  <Paper
-                    key={sale.id || i}
-                    sx={{
-                      p: 2,
-                      borderRadius: 2,
-                      bgcolor: '#fff',
-                      border: '1px solid #eee',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
+                  <Box key={sale.id || i} sx={{ p: 2, borderRadius: 2, bgcolor: '#fafafa', border: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Stack direction="row" spacing={2} alignItems="center">
-                      <Box
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: '50%',
-                          bgcolor: '#e3f2fd',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontWeight: 700,
-                          color: '#1976d2'
-                        }}
-                      >
+                      <Avatar sx={{ width: 40, height: 40, bgcolor: '#e3f2fd', color: '#1976d2', fontWeight: 800 }}>
                         {sale.name?.charAt(0) || '?'}
-                      </Box>
+                      </Avatar>
                       <Box>
-                        <Typography variant="subtitle2" fontWeight="700">
-                          {sale.name || 'Unknown Item'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {sale.timestamp?.toDate().toLocaleTimeString() || 'Just now'}
-                        </Typography>
+                        <Typography variant="subtitle2" fontWeight="800" color="#212121">{sale.name || 'Unknown Item'}</Typography>
+                        <Typography variant="caption" fontWeight="600" color="#9e9e9e">{sale.timestamp?.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) || 'Just now'}</Typography>
                       </Box>
                     </Stack>
-                    <Typography variant="subtitle2" fontWeight="800">
-                      ₹{parseFloat(sale.price || 0).toFixed(2)}
-                    </Typography>
-                  </Paper>
+                    <Typography variant="subtitle1" fontWeight="900" color="#2e7d32">₹{parseFloat(sale.price || 0).toFixed(2)}</Typography>
+                  </Box>
                 ))}
               </Stack>
             )}
