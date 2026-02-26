@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, increment, collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
-import { Box, Grid, Paper, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress, Stack, Button } from '@mui/material';
+import { Box, Grid, Paper, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress, Stack, Snackbar, Alert } from '@mui/material';
 import { QrCodeScanner, ReceiptLong } from '@mui/icons-material';
 
 export default function Sales({ setLastScanned }) {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(false);
   const bufferRef = useRef("");
+  
+  // New state for beautiful non-blocking alerts
+  const [toast, setToast] = useState({ open: false, message: "", severity: "error" });
 
   useEffect(() => {
     const q = query(collection(db, "sales"), orderBy("timestamp", "desc"), limit(20));
@@ -39,8 +42,15 @@ export default function Sales({ setLastScanned }) {
         name: item.name, price: item.price, timestamp: new Date(), barcode
       });
       if (setLastScanned) setLastScanned(barcode);
-    } else { alert("Item not in inventory!"); }
+    } else { 
+      // Replaced alert() with Snackbar
+      setToast({ open: true, message: "Item not found in inventory!", severity: "error" });
+    }
     setLoading(false);
+  };
+
+  const handleCloseToast = () => {
+    setToast({ ...toast, open: false });
   };
 
   return (
@@ -131,6 +141,13 @@ export default function Sales({ setLastScanned }) {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* --- NON-BLOCKING ALERTS --- */}
+      <Snackbar open={toast.open} autoHideDuration={3000} onClose={handleCloseToast} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert onClose={handleCloseToast} severity={toast.severity} sx={{ width: '100%', borderRadius: 2, fontWeight: 700 }}>
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

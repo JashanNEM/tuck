@@ -3,13 +3,13 @@ import { db } from '../firebase';
 import { doc, setDoc, getDoc, increment, collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { 
   Box, Typography, Stack, Button, TextField, InputAdornment, Chip,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Card
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Card,
+  Dialog, DialogTitle, DialogContent, DialogActions // Added Dialog components
 } from '@mui/material';
 import { 
   QrCodeScanner, Search, Add as AddIcon, Remove as RemoveIcon
 } from '@mui/icons-material';
 
-// 1. Metric Card Component for the layout
 function MetricCard({ title, value, color, sub, bg }) {
   return (
     <Card sx={{ 
@@ -27,15 +27,19 @@ function MetricCard({ title, value, color, sub, bg }) {
 
 export default function InventoryPage({ setLastScanned }) {
   const [history, setHistory] = useState([]);
-  const [allStock, setAllStock] = useState([]); // All items in DB
-  const [salesData, setSalesData] = useState({ revenue: 0, totalSales: 0 }); // Added state for Sales Metrics
+  const [allStock, setAllStock] = useState([]); 
+  const [salesData, setSalesData] = useState({ revenue: 0, totalSales: 0 }); 
   const [searchTerm, setSearchTerm] = useState("");
   const [status, setStatus] = useState("READY");
   const [loading, setLoading] = useState(false);
   const [sessionStats, setSessionStats] = useState({ count: 0, value: 0, items: 0 });
   const bufferRef = useRef("");
 
-  // Real-time listener for the WHOLE inventory database
+  // New state for the custom Scan Dialog
+  const [scanDialog, setScanDialog] = useState({
+    open: false, barcode: "", name: "", price: "", qty: 1, isNew: false
+  });
+
   useEffect(() => {
     const q = query(collection(db, "inventory"), orderBy("lastUpdated", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -45,7 +49,6 @@ export default function InventoryPage({ setLastScanned }) {
     return () => unsubscribe();
   }, []);
 
-  // Real-time listener for Sales Data (Revenue & Transactions)
   useEffect(() => {
     const q = query(collection(db, "sales"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -53,10 +56,7 @@ export default function InventoryPage({ setLastScanned }) {
       snapshot.forEach((doc) => {
         totalRev += Number(doc.data().price || 0);
       });
-      setSalesData({
-        revenue: totalRev,
-        totalSales: snapshot.size
-      });
+      setSalesData({ revenue: totalRev, totalSales: snapshot.size });
     });
     return () => unsubscribe();
   }, []);
@@ -70,12 +70,13 @@ export default function InventoryPage({ setLastScanned }) {
     );
   });
 
-  // Calculate Critical Items dynamically based on current inventory
-  // (Assuming critical means quantity is 2 or less)
   const criticalCount = allStock.filter(item => (item.quantity || 0) <= 2).length;
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Prevent barcode scanning from triggering when typing in an input field/dialog
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
       if (e.key === "Enter") {
         const barcode = bufferRef.current.trim();
         if (barcode.length > 2) processScan(barcode);
@@ -94,35 +95,57 @@ export default function InventoryPage({ setLastScanned }) {
     try {
       const docRef = doc(db, "inventory", barcode);
       const docSnap = await getDoc(docRef);
-      let name = "", price = 0;
+      let name = "", price = "";
 
       if (docSnap.exists()) {
         const data = docSnap.data();
-        name = data.name; price = data.price;
+        name = data.name; 
+        price = data.price;
       } else {
         const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
         const data = await res.json();
         if (data.status === 1) name = `${data.product.brands || ''} ${data.product.product_name}`.trim();
       }
 
-      if (!name) name = prompt("New Item Name:") || "Unknown";
-      const qtyStr = prompt(`Qty for ${name}:`, "1");
-      if (qtyStr === null) { setStatus("READY"); setLoading(false); return; }
-      const qty = parseInt(qtyStr) || 1;
-      if (price === 0) price = parseFloat(prompt(`Price for ${name}:`, "0")) || 0;
-
-      await setDoc(docRef, { name, price, quantity: increment(qty), barcode, lastUpdated: new Date() }, { merge: true });
-
-      const itemInfo = { name, qty, price, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
-      setHistory(prev => [itemInfo, ...prev].slice(0, 5));
-      setSessionStats(prev => ({ count: prev.count + qty, value: prev.value + (price * qty), items: prev.items + 1 }));
-      if (setLastScanned) setLastScanned(barcode);
+      // Open beautiful custom dialog instead of prompt()
+      setScanDialog({
+        open: true,
+        barcode,
+        name: name || "",
+        price: price !== "" ? price : "",
+        qty: 1,
+        isNew: !name || price === ""
+      });
       setStatus("READY");
     } catch (e) { setStatus("ERROR"); }
     setLoading(false);
   };
 
-  // Get category from item name (simple categorization)
+  const handleScanSubmit = async (e) => {
+    e.preventDefault();
+    const { barcode, name, price, qty } = scanDialog;
+    
+    const finalName = name.trim() || "Unknown";
+    const finalQty = parseInt(qty) || 1;
+    const finalPrice = parseFloat(price) || 0;
+
+    const docRef = doc(db, "inventory", barcode);
+    await setDoc(docRef, { 
+      name: finalName, 
+      price: finalPrice, 
+      quantity: increment(finalQty), 
+      barcode, 
+      lastUpdated: new Date() 
+    }, { merge: true });
+
+    const itemInfo = { name: finalName, qty: finalQty, price: finalPrice, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    setHistory(prev => [itemInfo, ...prev].slice(0, 5));
+    setSessionStats(prev => ({ count: prev.count + finalQty, value: prev.value + (finalPrice * finalQty), items: prev.items + 1 }));
+    if (setLastScanned) setLastScanned(barcode);
+    
+    setScanDialog({ open: false, barcode: "", name: "", price: "", qty: 1, isNew: false });
+  };
+
   const getCategory = (name) => {
     const lower = name.toLowerCase();
     if (lower.includes('milk') || lower.includes('yogurt') || lower.includes('cheese')) return 'DAIRY';
@@ -134,36 +157,18 @@ export default function InventoryPage({ setLastScanned }) {
   };
 
   return (
-    // boxSizing and width guarantees the page doesn't break out of the window frame
     <Box sx={{ flexGrow: 1, width: '100%', boxSizing: 'border-box', p: { xs: 2, md: 4 } }}>
       
-      {/* Header */}
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
         <Box>
-          <Typography variant="h4" fontWeight="900" sx={{ mb: 0.5 }}>
-            In Shop
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Add/Check Stock
-          </Typography>
+          <Typography variant="h4" fontWeight="900" sx={{ mb: 0.5 }}>In Shop</Typography>
+          <Typography variant="body2" color="text.secondary">Add/Check Stock</Typography>
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<QrCodeScanner />}
-          sx={{
-            borderRadius: 2,
-            borderColor: '#1976d2',
-            color: '#1976d2',
-            fontWeight: 700,
-            textTransform: 'none',
-            px: 2
-          }}
-        >
+        <Button variant="outlined" startIcon={<QrCodeScanner />} sx={{ borderRadius: 2, borderColor: '#1976d2', color: '#1976d2', fontWeight: 700, textTransform: 'none', px: 2 }}>
           {status === "READY" ? "SCANNER IS ACTIVE" : status}
         </Button>
       </Stack>
 
-      {/* TOP METRICS ROW: Forced layout grid using Stack */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ width: '100%', mb: 4 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <MetricCard title="Revenue" value={`₹${salesData.revenue.toFixed(2)}`} color="#1976d2" bg="#e3f2fd" sub="TOTAL INFLOW" />
@@ -176,39 +181,16 @@ export default function InventoryPage({ setLastScanned }) {
         </Box>
       </Stack>
 
-      {/* Search Bar */}
       <TextField
         fullWidth
         placeholder="Search by name or scan code..."
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        sx={{
-          mb: 3,
-          '& .MuiOutlinedInput-root': {
-            borderRadius: 3,
-            bgcolor: '#fff',
-            '& fieldset': { borderColor: '#e0e0e0' }
-          }
-        }}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <Search />
-            </InputAdornment>
-          ),
-        }}
+        sx={{ mb: 3, '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: '#fff', '& fieldset': { borderColor: '#e0e0e0' } } }}
+        InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
       />
 
-      {/* Product Data Table */}
-      <TableContainer 
-        component={Paper} 
-        sx={{ 
-          borderRadius: 3, 
-          boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-          border: 'none',
-          overflow: 'hidden'
-        }}
-      >
+      <TableContainer component={Paper} sx={{ borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', border: 'none', overflow: 'hidden' }}>
         <Table sx={{ minWidth: 650 }} aria-label="inventory table">
           <TableHead sx={{ bgcolor: '#f8f9fa' }}>
             <TableRow>
@@ -223,76 +205,19 @@ export default function InventoryPage({ setLastScanned }) {
           <TableBody>
             {filteredStock.map((item) => {
               const category = getCategory(item.name);
-              const isLowStock = (item.quantity || 0) <= 2; // Updated low stock rule to match "Critical" rule
+              const isLowStock = (item.quantity || 0) <= 2;
               
               return (
-                <TableRow
-                  key={item.id}
-                  sx={{ 
-                    '&:last-child td, &:last-child th': { border: 0 },
-                    '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.02)' },
-                    transition: 'background-color 0.2s'
-                  }}
-                >
-                  <TableCell component="th" scope="row">
-                    <Typography variant="subtitle2" fontWeight="800" sx={{ color: '#1a1a1a' }}>
-                      {item.name}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={category}
-                      size="small"
-                      sx={{
-                        bgcolor: '#e3f2fd',
-                        color: '#1976d2',
-                        fontWeight: 700,
-                        fontSize: '0.65rem',
-                        height: 24
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell sx={{ fontFamily: 'monospace', color: '#888', fontSize: '0.85rem' }}>
-                    {item.barcode}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="subtitle2" fontWeight="800" sx={{ color: '#333' }}>
-                      ₹{parseFloat(item.price || 0).toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Typography
-                      variant="subtitle1"
-                      fontWeight="900"
-                      sx={{ color: isLowStock ? '#d32f2f' : '#2e7d32' }}
-                    >
-                      {item.quantity || 0}
-                    </Typography>
-                  </TableCell>
+                <TableRow key={item.id} sx={{ '&:last-child td, &:last-child th': { border: 0 }, '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.02)' }, transition: 'background-color 0.2s' }}>
+                  <TableCell component="th" scope="row"><Typography variant="subtitle2" fontWeight="800" sx={{ color: '#1a1a1a' }}>{item.name}</Typography></TableCell>
+                  <TableCell><Chip label={category} size="small" sx={{ bgcolor: '#e3f2fd', color: '#1976d2', fontWeight: 700, fontSize: '0.65rem', height: 24 }} /></TableCell>
+                  <TableCell sx={{ fontFamily: 'monospace', color: '#888', fontSize: '0.85rem' }}>{item.barcode}</TableCell>
+                  <TableCell align="right"><Typography variant="subtitle2" fontWeight="800" sx={{ color: '#333' }}>₹{parseFloat(item.price || 0).toFixed(2)}</Typography></TableCell>
+                  <TableCell align="center"><Typography variant="subtitle1" fontWeight="900" sx={{ color: isLowStock ? '#d32f2f' : '#2e7d32' }}>{item.quantity || 0}</Typography></TableCell>
                   <TableCell align="center">
                     <Stack direction="row" spacing={1} justifyContent="center">
-                      <IconButton
-                        size="small"
-                        sx={{
-                          bgcolor: '#ffebee',
-                          color: '#d32f2f',
-                          borderRadius: 1.5,
-                          '&:hover': { bgcolor: '#ffcdd2' }
-                        }}
-                      >
-                        <RemoveIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        sx={{
-                          bgcolor: '#e8f5e9',
-                          color: '#2e7d32',
-                          borderRadius: 1.5,
-                          '&:hover': { bgcolor: '#c8e6c9' }
-                        }}
-                      >
-                        <AddIcon fontSize="small" />
-                      </IconButton>
+                      <IconButton size="small" onClick={() => { setScanDialog({ open: true, barcode: item.barcode, name: item.name, price: item.price, qty: -1, isNew: false }); }} sx={{ bgcolor: '#ffebee', color: '#d32f2f', borderRadius: 1.5, '&:hover': { bgcolor: '#ffcdd2' } }}><RemoveIcon fontSize="small" /></IconButton>
+                      <IconButton size="small" onClick={() => { setScanDialog({ open: true, barcode: item.barcode, name: item.name, price: item.price, qty: 1, isNew: false }); }} sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', borderRadius: 1.5, '&:hover': { bgcolor: '#c8e6c9' } }}><AddIcon fontSize="small" /></IconButton>
                     </Stack>
                   </TableCell>
                 </TableRow>
@@ -300,19 +225,52 @@ export default function InventoryPage({ setLastScanned }) {
             })}
           </TableBody>
         </Table>
-        
-        {/* Empty State */}
         {filteredStock.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 8 }}>
-            <Typography variant="h6" color="text.secondary">
-              {searchTerm ? 'No products found' : 'No products in inventory'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Start scanning items to add them to your inventory
-            </Typography>
+            <Typography variant="h6" color="text.secondary">{searchTerm ? 'No products found' : 'No products in inventory'}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Start scanning items to add them to your inventory</Typography>
           </Box>
         )}
       </TableContainer>
+
+      {/* --- BEAUTIFUL SCAN ENTRY DIALOG --- */}
+      <Dialog open={scanDialog.open} onClose={() => setScanDialog(prev => ({ ...prev, open: false }))} PaperProps={{ sx: { borderRadius: 3, minWidth: 350 } }}>
+        <form onSubmit={handleScanSubmit}>
+          <DialogTitle sx={{ fontWeight: 900, pb: 1, bgcolor: '#f8f9fa' }}>
+            {scanDialog.isNew ? "New Item Scanned" : `Update ${scanDialog.name}`}
+          </DialogTitle>
+          <DialogContent sx={{ pt: '24px !important' }}>
+            {scanDialog.isNew && (
+              <TextField
+                autoFocus={scanDialog.isNew}
+                margin="dense" label="Product Name" fullWidth variant="outlined" required
+                value={scanDialog.name} onChange={(e) => setScanDialog(p => ({ ...p, name: e.target.value }))}
+                sx={{ mb: 2 }}
+              />
+            )}
+            {scanDialog.isNew && (
+              <TextField
+                margin="dense" label="Price (₹)" type="number" fullWidth variant="outlined" required
+                value={scanDialog.price} onChange={(e) => setScanDialog(p => ({ ...p, price: e.target.value }))}
+                sx={{ mb: 2 }}
+              />
+            )}
+            <TextField
+              autoFocus={!scanDialog.isNew}
+              margin="dense" label="Quantity to Add/Remove" type="number" fullWidth variant="outlined" required
+              value={scanDialog.qty} onChange={(e) => setScanDialog(p => ({ ...p, qty: e.target.value }))}
+              helperText="Use negative numbers to deduct stock manually"
+            />
+          </DialogContent>
+          <DialogActions sx={{ p: 2, bgcolor: '#f8f9fa' }}>
+            <Button onClick={() => setScanDialog(prev => ({ ...prev, open: false }))} sx={{ fontWeight: 700, color: '#757575' }}>Cancel</Button>
+            <Button type="submit" variant="contained" sx={{ fontWeight: 700, borderRadius: 2, px: 3, boxShadow: 'none' }}>
+              Save Stock
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
     </Box>
   );
 }
