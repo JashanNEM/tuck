@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, updateDoc, increment, collection, onSnapshot, query, orderBy, limit, where, getDocs } from "firebase/firestore";
-import { Box, Grid, Paper, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress, Stack, Snackbar, Alert } from '@mui/material';
-import { QrCodeScanner, ReceiptLong } from '@mui/icons-material';
+import { Box, Grid, Paper, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress, Stack, Snackbar, Alert, Button } from '@mui/material';
+import { QrCodeScanner, ReceiptLong, Usb, UsbOff } from '@mui/icons-material';
 
 export default function Sales({ setLastScanned }) {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [scannerActive, setScannerActive] = useState(false);
   const bufferRef = useRef("");
   const [toast, setToast] = useState({ open: false, message: "", severity: "error" });
 
@@ -15,8 +16,10 @@ export default function Sales({ setLastScanned }) {
     return onSnapshot(q, (snap) => setSales(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
 
+  // 1. KEYBOARD MODE (Fallback)
   useEffect(() => {
     const handleKey = async (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === "Enter") {
         const code = bufferRef.current.trim();
         if (code) await handleSale(code);
@@ -27,6 +30,45 @@ export default function Sales({ setLastScanned }) {
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
+  // 2. BACKGROUND SERIAL MODE (Pure JS Native API)
+  const connectUSBScanner = async () => {
+    try {
+      // Requests access to the serial port (Electron auto-approves via main.cjs)
+      const port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 9600 });
+      setScannerActive(true);
+      setToast({ open: true, message: "USB Scanner Connected Successfully!", severity: "success" });
+
+      const textDecoder = new TextDecoderStream();
+      port.readable.pipeTo(textDecoder.writable);
+      const reader = textDecoder.readable.getReader();
+
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        buffer += value;
+        // Check if the scanner hit "Enter" (Newline)
+        if (buffer.includes('\n') || buffer.includes('\r')) {
+          const codes = buffer.split(/\r?\n/);
+          buffer = codes.pop(); // Keep partial scans in the buffer
+          
+          for (const code of codes) {
+            if (code.trim()) {
+              console.log("Background Scan Detected!", code.trim());
+              await handleSale(code.trim());
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Scanner Error:", err);
+      setScannerActive(false);
+      setToast({ open: true, message: "Scanner not found. Ensure it is in 'Serial' mode.", severity: "error" });
+    }
+  };
+
   const handleSale = async (barcode) => {
     setLoading(true);
     const docRef = doc(db, "inventory", barcode);
@@ -34,31 +76,22 @@ export default function Sales({ setLastScanned }) {
     
     if (snap.exists()) {
       const item = snap.data();
-      
-      // 👉 FEFO AUTO-DEDUCTION ALGORITHM
-      // Find all batches for this product that still have items inside
       const batchesQ = query(collection(db, "batches"), where("productId", "==", barcode), where("qty_remaining", ">", 0));
       const batchSnap = await getDocs(batchesQ);
       
       if (!batchSnap.empty) {
-        // Sort manually by expiry to avoid Firebase composite index errors for this simple setup
         const sortedBatches = batchSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .sort((a, b) => a.expiry_date.toDate() - b.expiry_date.toDate());
         
-        // Deduct from the OLDEST expiry batch (First In / First Expiring -> First Out)
-        const oldestBatch = sortedBatches[0];
-        await updateDoc(doc(db, "batches", oldestBatch.id), { qty_remaining: increment(-1) });
+        await updateDoc(doc(db, "batches", sortedBatches[0].id), { qty_remaining: increment(-1) });
       }
 
-      // Deduct total master inventory
       await setDoc(docRef, { quantity: increment(-1) }, { merge: true });
-      
-      // Log the transaction
       await setDoc(doc(collection(db, "sales")), { name: item.name, price: item.price, timestamp: new Date(), barcode });
       if (setLastScanned) setLastScanned(barcode);
     } else { 
-      setToast({ open: true, message: "Item not found in inventory!", severity: "error" });
+      setToast({ open: true, message: `Item ${barcode} not found!`, severity: "error" });
     }
     setLoading(false);
   };
@@ -68,10 +101,22 @@ export default function Sales({ setLastScanned }) {
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
         <Box>
           <Typography variant="h4" fontWeight="900" sx={{ mb: 0.5, color: '#1a1a1a' }}>Point of Sale</Typography>
-          <Typography variant="body2" color="text.secondary">Scan barcodes to process transactions automatically (FEFO deduction active)</Typography>
+          <Typography variant="body2" color="text.secondary">Scan barcodes to process transactions automatically</Typography>
         </Box>
+        
+        {/* NEW NATIVE SCANNER BUTTON */}
+        <Button 
+          variant={scannerActive ? "contained" : "outlined"} 
+          color={scannerActive ? "success" : "warning"}
+          startIcon={scannerActive ? <Usb /> : <UsbOff />}
+          onClick={connectUSBScanner}
+          sx={{ borderRadius: 2, fontWeight: 700 }}
+        >
+          {scannerActive ? "USB SCANNER ACTIVE" : "CONNECT USB SCANNER"}
+        </Button>
       </Stack>
 
+      {/* ... [Rest of your UI Grid & Table stays EXACTLY the same] ... */}
       <Grid container spacing={3}>
         <Grid item xs={12} md={4}>
           <Paper sx={{ p: 5, textAlign: 'center', borderRadius: 3, bgcolor: '#fff', boxShadow: loading ? '0 0 0 4px rgba(46, 125, 50, 0.2)' : '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid rgba(224, 224, 224, 0.4)', height: '100%', transition: 'all 0.3s ease' }}>

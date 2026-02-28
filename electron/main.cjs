@@ -5,54 +5,47 @@ let mainWindow;
 let powerBlockerId;
 
 function createWindow() {
-  // Create the desktop window
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    title: "Tuck Shop POS",
-    autoHideMenuBar: true, // Hides the annoying top menu bar (File, Edit, View, etc.)
+    width: 1280, height: 800, title: "Tuck Shop POS", autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
   });
 
-  // Check if we are running in development mode
-  const isDev = process.env.NODE_ENV !== 'production';
+  // 👉 AUTOMATICALLY APPROVE USB SCANNER REQUESTS
+  mainWindow.webContents.session.on('select-serial-port', (event, portList, webContents, callback) => {
+    event.preventDefault();
+    if (portList && portList.length > 0) {
+      callback(portList[0].portId); // Auto-connect to the first USB serial device
+    } else {
+      callback(''); // Fail if no scanner is plugged in
+    }
+  });
 
+  mainWindow.webContents.session.setPermissionCheckHandler((webContents, permission) => {
+    return true; // Allow serial permissions
+  });
+
+  mainWindow.webContents.session.setDevicePermissionHandler((details) => {
+    return true; // Allow serial device access
+  });
+
+  const isDev = process.env.NODE_ENV !== 'production';
   if (isDev) {
-    // In dev, load the Vite local server
     mainWindow.loadURL('http://localhost:5173');
   } else {
-    // In production, load the built React files
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // 👉 NATIVE SLEEP PREVENTION 
-  // This physically blocks the OS from turning off the screen or sleeping
+  // 👉 PREVENT SLEEP
   powerBlockerId = powerSaveBlocker.start('prevent-display-sleep');
-  console.log('Power Save Blocker active. ID:', powerBlockerId);
-
-  // Optional: Maximize the window automatically
   mainWindow.maximize();
 }
 
-app.whenReady().then(() => {
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
+app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-  // Stop blocking sleep when the app is closed
-  if (powerBlockerId) {
-    powerSaveBlocker.stop(powerBlockerId);
-  }
+  if (process.platform !== 'darwin') app.quit();
+  if (powerBlockerId) powerSaveBlocker.stop(powerBlockerId);
 });

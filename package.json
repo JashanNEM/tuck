@@ -1,16 +1,42 @@
 {
-  "name": "tuck",
+  "name": "tuck-shop-pos",
+  "productName": "Tuck Shop POS",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "main": "electron/main.cjs", 
+  "version": "1.0.0",
+  "description": "Point of Sale for Tuck Shop",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "cross-env NODE_ENV=development concurrently \"vite\" \"electron .\"",
-    "electron:build": "vite build && electron ."
+    "electron:build": "vite build && electron .",
+    "electron:pack": "vite build && electron-builder"
+  },
+  "build": {
+    "appId": "com.tuckshop.pos",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": "dmg"
+    }
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -29,7 +55,8 @@
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
-    "electron": "^34.1.1",
+    "electron": "^30.0.0",
+    "electron-builder": "^25.1.8",
     "eslint": "^9.19.0",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.0.0",
